@@ -8,51 +8,68 @@ namespace AzureBlobStorageApiTest.Controllers
     [ApiController]
     public class FileController : ControllerBase
     {
-        readonly IBlobStorage _blobStorage;
+        private readonly IBlobStorage _blobStorage;
+
         public FileController(IBlobStorage blobStorage)
         {
             _blobStorage = blobStorage;
         }
-        [HttpGet("[action]")]
-        public async Task<IActionResult> UploadAsync(string fileName)
+
+        [HttpPost("upload")]
+        public async Task<IActionResult> UploadAsync([FromForm] IFormFile file)
         {
+            if (file == null || file.Length == 0)
+                return BadRequest("Invalid file.");
+
             try
             {
-                FileStream fileStream = new FileStream(fileName, FileMode.OpenOrCreate);
-                await _blobStorage.UploadAsnyc(fileStream, Path.GetFileName(fileName), "your-containerName");
-                return Ok(true);
+                using (var stream = file.OpenReadStream())
+                {
+                    await _blobStorage.UploadAsnyc(stream, file.FileName, "your-containerName");
+                }
+                return Ok(new { success = true, message = "File uploaded successfully." });
             }
-            catch
+            catch (Exception ex)
             {
-                return Ok("An unexpected error was encountered.");
+                return StatusCode(500, new { success = false, message = $"An unexpected error was encountered: {ex.Message}" });
             }
         }
-        [HttpGet("[action]")]
+
+        [HttpGet("download")]
         public async Task<IActionResult> DownloadAsync(string fileName, string containerName)
         {
+            if (string.IsNullOrWhiteSpace(fileName) || string.IsNullOrWhiteSpace(containerName))
+                return BadRequest("Invalid file name or container name.");
+
             try
             {
-                Stream stream = await _blobStorage.DownloadAsync(fileName, containerName);
+                var stream = await _blobStorage.DownloadAsync(fileName, containerName);
+                if (stream == null)
+                    return NotFound("File not found.");
+
                 return File(stream, "application/octet-stream", fileName);
             }
-            catch
+            catch (Exception ex)
             {
-                return Ok("An unexpected error was encountered.");
+                return StatusCode(500, new { success = false, message = $"An unexpected error was encountered: {ex.Message}" });
             }
         }
-        [HttpGet("[action]")]
+
+        [HttpDelete("delete")]
         public async Task<IActionResult> DeleteAsync(string fileName, string containerName)
         {
+            if (string.IsNullOrWhiteSpace(fileName) || string.IsNullOrWhiteSpace(containerName))
+                return BadRequest("Invalid file name or container name.");
+
             try
             {
                 await _blobStorage.DeleteAsync(fileName, containerName);
-                return Ok(true);
+                return Ok(new { success = true, message = "File deleted successfully." });
             }
-            catch
+            catch (Exception ex)
             {
-                return Ok(false);
+                return StatusCode(500, new { success = false, message = $"An unexpected error was encountered: {ex.Message}" });
             }
         }
-       
     }
 }
